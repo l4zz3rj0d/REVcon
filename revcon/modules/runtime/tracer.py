@@ -1,14 +1,15 @@
 import subprocess
 import os
 import tempfile
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 class RuntimeTracer:
     """Executes the binary under strace and ltrace to collect dynamic events."""
 
-    def __init__(self, filepath: str, timeout: int = 5):
+    def __init__(self, filepath: str, timeout: int = 5, env_vars: Optional[Dict[str, str]] = None):
         self.filepath = filepath
         self.timeout = timeout
+        self.env_vars = env_vars or {}
 
     def trace(self) -> Dict[str, Any]:
         """Runs the traces and returns the collected data."""
@@ -21,7 +22,7 @@ class RuntimeTracer:
     def _run_strace(self) -> Dict[str, Any]:
         """Runs strace filtering for memory, process, and network events."""
         # mmap, mprotect, ptrace, fork, execve, socket, connect, getenv
-        trace_events = "mmap,mprotect,ptrace,fork,execve,socket,connect"
+        trace_events = "mmap,mprotect,ptrace,fork,clone,execve,socket,connect"
         
         # We write dummy input in case the binary blocks on stdin
         dummy_input = b"A" * 100 + b"\n"
@@ -30,7 +31,13 @@ class RuntimeTracer:
             with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
                 log_file = f.name
             
-            cmd = ["strace", "-f", f"-e trace={trace_events}", "-o", log_file, self.filepath]
+            cmd = ["strace", "-f", "-e", f"trace={trace_events}", "-o", log_file, self.filepath]
+            
+            env = os.environ.copy()
+            if self.env_vars:
+                env.update(self.env_vars)
+            binary_dir = os.path.dirname(os.path.abspath(self.filepath))
+            env["LD_LIBRARY_PATH"] = f"{binary_dir}:{env.get('LD_LIBRARY_PATH', '')}"
             
             # Run the process
             proc = subprocess.run(
@@ -38,6 +45,8 @@ class RuntimeTracer:
                 input=dummy_input,
                 stdout=subprocess.DEVNULL, 
                 stderr=subprocess.DEVNULL,
+                cwd=binary_dir,
+                env=env,
                 timeout=self.timeout
             )
             
@@ -91,13 +100,22 @@ class RuntimeTracer:
             with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
                 log_file = f.name
             
-            cmd = ["ltrace", "-o", log_file, self.filepath]
+            # Trace library internal calls (-x "*") and trace child processes (-f)
+            cmd = ["ltrace", "-f", "-x", "*", "-o", log_file, self.filepath]
+            
+            env = os.environ.copy()
+            if self.env_vars:
+                env.update(self.env_vars)
+            binary_dir = os.path.dirname(os.path.abspath(self.filepath))
+            env["LD_LIBRARY_PATH"] = f"{binary_dir}:{env.get('LD_LIBRARY_PATH', '')}"
             
             proc = subprocess.run(
                 cmd, 
                 input=dummy_input,
                 stdout=subprocess.DEVNULL, 
                 stderr=subprocess.DEVNULL,
+                cwd=binary_dir,
+                env=env,
                 timeout=self.timeout
             )
             

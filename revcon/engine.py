@@ -16,6 +16,7 @@ from revcon.modules.runtime.payload_detector import PayloadDetector
 from revcon.modules.reasoning.hypothesis import HypothesisEngine
 from revcon.modules.reasoning.educator import EducationalGuidance
 from revcon.modules.ranking import FunctionRanker
+from revcon.modules.code_analyzer import CodeAnalyzer
 from revcon.plugins import load_plugins
 from revcon.utils import log_verbose
 
@@ -116,12 +117,38 @@ class AnalysisEngine:
                 emu_module = EmulationEngine(self.filepath, binary_intel["arch"], binary_intel["bitness"], code_bytes, base_addr)
                 emulation_intel = emu_module.analyze()
 
-        # 8.6 Runtime Analysis
+        # 8.6 Deep Code Analysis & Function Discovery
+        code_analyzer_intel = {
+            "functions_found": 0,
+            "analyzed_count": 0,
+            "interesting_count": 0,
+            "dependencies": [],
+            "exports": [],
+            "recovered_envs": [],
+            "relationships": [],
+            "call_graph": {},
+            "functions": []
+        }
+        
+        if not self.quick:
+            log_verbose("[*] Performing Deep Code Analysis (Function Discovery, Call Graph, and Environment variables)...", self.verbose)
+            analyzer = CodeAnalyzer(self.filepath, binary_intel["arch"], binary_intel["bitness"], binary_intel["format"], self.verbose)
+            code_analyzer_intel = analyzer.analyze()
+
+        # Extract ranked functions from code analyzer
+        ranked_functions = code_analyzer_intel["functions"]
+        # Sort functions by score
+        ranked_functions.sort(key=lambda x: x.get("score", 0), reverse=True)
+        ranked_functions = [f for f in ranked_functions if f.get("score", 0) > 0]
+
+        # 8.7 Runtime Analysis
         runtime_intel = {}
         payload_intel = {}
         if self.dynamic:
             log_verbose("[*] Running Dynamic Trace Analysis (strace/ltrace)...", self.verbose)
-            tracer = RuntimeTracer(self.filepath)
+            # Pass any recovered environment variables dynamically to the tracer
+            env_vars = {env["var"]: "1" for env in code_analyzer_intel.get("recovered_envs", [])}
+            tracer = RuntimeTracer(self.filepath, env_vars=env_vars)
             runtime_intel = tracer.trace()
             
             payload_det = PayloadDetector(runtime_intel)
@@ -130,16 +157,6 @@ class AnalysisEngine:
             # Simulated payload dumping logic
             if self.dump_payloads and payload_intel.get("hidden_payload_detected"):
                 log_verbose("[*] Extracting hidden payloads to disk (Simulated)...", self.verbose)
-                
-        # 8.7 Suspicious Function Ranking
-        ranked_functions = []
-        if not self.quick:
-            log_verbose("[*] Ranking Suspicious Functions...", self.verbose)
-            heuristics_module = ReverseEngineeringHeuristics(self.filepath, binary_intel["arch"], binary_intel["bitness"], binary_intel["format"], strings_intel["all_strings"], self.verbose)
-            code_bytes, base_addr = heuristics_module._extract_code_segment()
-            if code_bytes:
-                ranker = FunctionRanker(self.filepath, binary_intel["arch"], binary_intel["bitness"], binary_intel["format"])
-                ranked_functions = ranker.analyze(code_bytes, base_addr, {})
 
         # Assemble full metadata for predictor & plugins
         metadata = {
@@ -157,7 +174,8 @@ class AnalysisEngine:
             "emulation": emulation_intel,
             "runtime_tracer": runtime_intel,
             "runtime_payload": payload_intel,
-            "ranked_functions": ranked_functions
+            "ranked_functions": ranked_functions,
+            "code_analyzer": code_analyzer_intel
         }
 
         # 9. Challenge Type Predictor
