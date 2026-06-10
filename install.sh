@@ -51,46 +51,49 @@ else
     echo -e "\n[+] All system dependencies satisfied."
 fi
 
-echo -e "\n[*] Installing REVcon Python package..."
-# Check if python3 and pip are installed
+echo -e "\n[*] Installing REVcon Python package in a virtual environment..."
+# Check if python3 is installed
 if ! command -v python3 >/dev/null 2>&1; then
     echo -e "${RED}[-] python3 is required but not installed. Exiting.${NC}"
     exit 1
 fi
 
-if ! command -v pip3 >/dev/null 2>&1 && ! command -v pip >/dev/null 2>&1; then
-    echo -e "${RED}[-] pip is required but not installed. Exiting.${NC}"
+# Ensure python3-venv is available
+if ! python3 -m venv --help >/dev/null 2>&1; then
+    echo -e "${RED}[-] python3-venv is required but not installed. Exiting.${NC}"
+    echo -e "${YELLOW}[*] On Debian/Ubuntu, run: sudo apt install python3-venv${NC}"
     exit 1
 fi
 
-PIP_CMD="pip3"
-if ! command -v pip3 >/dev/null 2>&1; then
-    PIP_CMD="pip"
+# Determine venv and bin locations
+if [ "$EUID" -ne 0 ]; then
+    VENV_DIR="$HOME/.local/share/revcon/venv"
+    BIN_DIR="$HOME/.local/bin"
+else
+    VENV_DIR="/opt/revcon/venv"
+    BIN_DIR="/usr/local/bin"
 fi
 
-# Attempt to install, handling PEP 668 (externally-managed-environment)
-if [ "$EUID" -ne 0 ]; then
-    echo -e "[*] Installing in user-space (--user)..."
-    $PIP_CMD install --user . || {
-        echo -e "${YELLOW}[!] Retrying with --break-system-packages if available...${NC}"
-        $PIP_CMD install --user --break-system-packages .
-    }
-else
-    echo -e "[*] Installing system-wide..."
-    $PIP_CMD install . || {
-        echo -e "${YELLOW}[!] Retrying with --break-system-packages if available...${NC}"
-        $PIP_CMD install --break-system-packages .
-    }
-fi
+echo -e "[*] Creating virtual environment at ${VENV_DIR}..."
+mkdir -p "$(dirname "$VENV_DIR")"
+python3 -m venv "$VENV_DIR"
+
+echo -e "[*] Installing REVcon inside the virtual environment..."
+"$VENV_DIR/bin/pip" install --upgrade pip
+"$VENV_DIR/bin/pip" install .
+
+echo -e "[*] Creating symlink in ${BIN_DIR}/revcon..."
+mkdir -p "$BIN_DIR"
+ln -sf "$VENV_DIR/bin/revcon" "$BIN_DIR/revcon"
 
 echo -e "\n[*] Verifying installation..."
-# Add local bin to path just in case for verification if installed with --user
-export PATH="$HOME/.local/bin:$PATH"
+# Add local bin to path just in case for verification if installed in user space
+export PATH="$BIN_DIR:$PATH"
 
 if command -v revcon >/dev/null 2>&1; then
     echo -e "${GREEN}[+] REVcon installed successfully!${NC}"
-    echo -e "[+] You can now run it using the 'revcon' command."
+    echo -e "[+] You can now run it from anywhere using the 'revcon' command."
 else
     echo -e "${RED}[-] Verification failed. 'revcon' command not found in PATH.${NC}"
-    echo -e "${YELLOW}[*] Make sure \$HOME/.local/bin is in your PATH. (e.g. export PATH=\$PATH:\$HOME/.local/bin)${NC}"
+    echo -e "${YELLOW}[*] Make sure ${BIN_DIR} is in your PATH. (e.g. export PATH=\$PATH:${BIN_DIR})${NC}"
 fi
