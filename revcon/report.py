@@ -20,7 +20,7 @@ class ReportGenerator:
         if self._nc:
             print(f"\n  [ {title} ]")
             return
-        icon = f"{C.CY}\u25d3{C.RST} " if orbital else ""
+        icon = f"{C.R}\u25d3{C.RST} " if orbital else ""
         print(f"\n  {icon}{C.B}{C.W}{title}{C.RST}")
         print(f"  {C.GR}{'\u2500' * 60}{C.RST}")
 
@@ -29,7 +29,7 @@ class ReportGenerator:
         if self._nc:
             print(f"    {label:<20}  {_strip(value)}")
         else:
-            print(f"  {C.CY}\u25cf{C.RST} {C.W}{label:<18}{C.RST} {vc}{value}{C.RST}")
+            print(f"  {C.R}\u25cf{C.RST} {C.W}{label:<18}{C.RST} {vc}{value}{C.RST}")
 
     def _finding(self, tag: str, severity: str, msg: str) -> None:
         if self._nc:
@@ -187,7 +187,7 @@ class ReportGenerator:
                     if nc:
                         print(f"    [{title}]")
                     else:
-                        print(f"  {C.CY}{C.B}[{title}]{C.RST}")
+                        print(f"  {C.R}{C.B}[{title}]{C.RST}")
                     for s in lst[:5]:
                         short = s if len(s) < 80 else s[:77] + "..."
                         if nc:
@@ -294,7 +294,7 @@ class ReportGenerator:
             if nc:
                 print(f"\n    Analysis Strategies:")
             else:
-                print(f"\n  {C.CY}{C.B}Analysis Strategies:{C.RST}")
+                print(f"\n  {C.R}{C.B}Analysis Strategies:{C.RST}")
             for strategy in strategies:
                 if nc:
                     print(f"      \u2022 {strategy}")

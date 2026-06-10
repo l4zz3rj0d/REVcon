@@ -77,8 +77,8 @@ def print_banner():
         print(f"  REVcon v{VERSION}  —  Binary Recon Engine")
         print(f"  {_BANNER_CREDIT.strip()}\n")
         return
-    print(f"{C.CY}{C.B}{_BANNER_ART}{C.RST}")
+    print(f"{C.R}{C.B}{_BANNER_ART}{C.RST}")
     print()
     print(f"{C.W}{_BANNER_CREDIT}{C.RST}")
     print()
-    print(f"{C.CYD}{_BANNER_SUB.format(ver=VERSION)}{C.RST}\n")
+    print(f"{C.RD}{_BANNER_SUB.format(ver=VERSION)}{C.RST}\n")

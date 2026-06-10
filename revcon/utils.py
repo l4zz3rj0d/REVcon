@@ -39,7 +39,7 @@ def log_info(msg: str) -> None:
     if nc:
         print(f"[*] {msg}")
     else:
-        print(f"{C.CY}[*]{C.RST} {C.W}{msg}{C.RST}")
+        print(f"{C.R}[*]{C.RST} {C.W}{msg}{C.RST}")
 
 def log_success(msg: str) -> None:
     """Prints a success message."""

@@ -20,13 +20,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="revcon",
         description=(
-            f"{C.CY}{C.B}REVcon v{VERSION}{C.RST}  —  "
+            f"{C.R}{C.B}REVcon v{VERSION}{C.RST}  —  "
             "Automated Binary Reconnaissance & Triage Framework"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             f"\n{C.GR}  ── Examples ────────────────────────────────────────────────────\n\n"
-            f"{C.CY}  revcon chall.bin\n"
+            f"{C.R}  revcon chall.bin\n"
             f"  revcon crackme -q\n"
             f"  revcon target.exe -j > intel.json\n"
             f"  revcon challenge -F \"HTB{{}}\"\n"
@@ -38,7 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p.add_argument("binary", nargs="?", help="Path to the binary file to analyze")
 
-    scan = p.add_argument_group(f"{C.CY}Scan Options{C.RST}")
+    scan = p.add_argument_group(f"{C.R}Scan Options{C.RST}")
     scan.add_argument(
         "--quick", "-q", action="store_true",
         help="Skip Capstone disassembly heuristics and entropy analysis"
@@ -48,13 +48,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Enable verbose logging / debug output"
     )
 
-    out = p.add_argument_group(f"{C.CY}Output{C.RST}")
+    out = p.add_argument_group(f"{C.R}Output{C.RST}")
     out.add_argument(
         "--json", "-j", action="store_true",
         help="Output full findings as raw JSON to stdout"
     )
 
-    intel = p.add_argument_group(f"{C.CY}Intelligence{C.RST}")
+    intel = p.add_argument_group(f"{C.R}Intelligence{C.RST}")
     intel.add_argument(
         "--flag-format", "-F", type=str, default=None, metavar="FORMAT",
         help="Flag format to search for, e.g. 'HTB{}', 'FLAG{}', 'DUCTF{}'"
@@ -95,13 +95,13 @@ def main() -> None:
             print_banner()
             nc = _no_color()
             if not nc:
-                print(f"{C.CY}[*]{C.RST} {C.W}Analyzing binary:{C.RST} {C.B}{args.binary}{C.RST}")
+                print(f"{C.R}[*]{C.RST} {C.W}Analyzing binary:{C.RST} {C.B}{args.binary}{C.RST}")
                 if args.quick:
-                    print(f"{C.CY}[*]{C.RST} {C.W}Running in{C.RST} {C.Y}{C.B}QUICK{C.RST} {C.W}mode{C.RST}")
+                    print(f"{C.R}[*]{C.RST} {C.W}Running in{C.RST} {C.R}{C.B}QUICK{C.RST} {C.W}mode{C.RST}")
                 if args.flag_format:
-                    print(f"{C.CY}[*]{C.RST} {C.W}Flag format:{C.RST} {C.G}{args.flag_format}{C.RST}")
+                    print(f"{C.R}[*]{C.RST} {C.W}Flag format:{C.RST} {C.G}{args.flag_format}{C.RST}")
                 if args.verbose:
-                    print(f"{C.CY}[*]{C.RST} {C.W}Verbose logging enabled{C.RST}\n")
+                    print(f"{C.R}[*]{C.RST} {C.W}Verbose logging enabled{C.RST}\n")
             else:
                 print(f"[*] Analyzing binary: {args.binary}")
                 if args.quick:
