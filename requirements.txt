@@ -1,0 +1,5 @@
+colorama>=0.4.6
+capstone>=5.0.1
+pyelftools>=0.29
+pefile>=2023.2.7
+macholib>=1.16.2
