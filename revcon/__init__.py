@@ -44,6 +44,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip Capstone disassembly heuristics and entropy analysis"
     )
     scan.add_argument(
+        "--dynamic", "-D", action="store_true",
+        help="Enable runtime analysis (strace/ltrace/LD_DEBUG). WARNING: Executes the binary!"
+    )
+    scan.add_argument(
         "--verbose", "-v", action="store_true",
         help="Enable verbose logging / debug output"
     )
@@ -52,6 +56,10 @@ def _build_parser() -> argparse.ArgumentParser:
     out.add_argument(
         "--json", "-j", action="store_true",
         help="Output full findings as raw JSON to stdout"
+    )
+    out.add_argument(
+        "--dump", "-d", action="store_true",
+        help="Automatically dump extracted payloads to disk if detected at runtime"
     )
 
     intel = p.add_argument_group(f"{C.R}Intelligence{C.RST}")
@@ -98,16 +106,24 @@ def main() -> None:
                 print(f"{C.R}[*]{C.RST} {C.W}Analyzing binary:{C.RST} {C.B}{args.binary}{C.RST}")
                 if args.quick:
                     print(f"{C.R}[*]{C.RST} {C.W}Running in{C.RST} {C.R}{C.B}QUICK{C.RST} {C.W}mode{C.RST}")
+                if args.dynamic:
+                    print(f"{C.R}[*]{C.RST} {C.W}Runtime analysis enabled: {C.R}{C.B}DANGEROUS EXECUTION{C.RST}")
                 if args.flag_format:
                     print(f"{C.R}[*]{C.RST} {C.W}Flag format:{C.RST} {C.G}{args.flag_format}{C.RST}")
+                if args.dump:
+                    print(f"{C.R}[*]{C.RST} {C.W}Payload dumping enabled{C.RST}")
                 if args.verbose:
                     print(f"{C.R}[*]{C.RST} {C.W}Verbose logging enabled{C.RST}\n")
             else:
                 print(f"[*] Analyzing binary: {args.binary}")
                 if args.quick:
                     print("[*] Running in QUICK mode")
+                if args.dynamic:
+                    print("[*] Runtime analysis enabled: DANGEROUS EXECUTION")
                 if args.flag_format:
                     print(f"[*] Flag format: {args.flag_format}")
+                if args.dump:
+                    print("[*] Payload dumping enabled")
                 if args.verbose:
                     print("[*] Verbose logging enabled\n")
 
@@ -116,7 +132,9 @@ def main() -> None:
             args.binary,
             quick=args.quick,
             verbose=args.verbose,
-            flag_format=args.flag_format
+            flag_format=args.flag_format,
+            dynamic=args.dynamic,
+            dump_payloads=args.dump
         )
         results = engine.run()
 

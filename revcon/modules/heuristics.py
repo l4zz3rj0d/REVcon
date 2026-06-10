@@ -25,7 +25,8 @@ class ReverseEngineeringHeuristics:
             "xor_loops_detected": False,
             "base64_detected": False,
             "crypto_signatures": [],
-            "packed_binary": False
+            "packed_binary": False,
+            "validators": []
         }
 
         # 1. Base64 Detection (check strings)
@@ -75,6 +76,7 @@ class ReverseEngineeringHeuristics:
             # Run heuristic scanners on instructions
             self._scan_length_checks(instructions, result)
             self._scan_per_char_validation(instructions, result)
+            self._scan_validators(instructions, result)
             self._scan_function_dispatch(instructions, result)
             self._scan_xor_loops(instructions, result)
             self._scan_crypto_constants(code_bytes, result)
@@ -184,6 +186,28 @@ class ReverseEngineeringHeuristics:
         # If we see multiple byte comparisons, it indicates character checks
         if byte_cmp_count >= 5:
             result["per_character_validation"] = True
+
+    def _scan_validators(self, instructions: List[Any], result: Dict[str, Any]) -> None:
+        """Detects custom comparison loops, like input[i] ^ constant[i] == x"""
+        byte_regs = {"al", "bl", "cl", "dl", "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b"}
+        
+        validators = set()
+        for idx, insn in enumerate(instructions):
+            if insn.mnemonic in ("xor", "add", "sub"):
+                parts = [p.strip() for p in insn.op_str.split(",")]
+                if len(parts) == 2 and parts[0] in byte_regs:
+                    # Look ahead a few instructions for a cmp
+                    for look_ahead in range(1, 5):
+                        if idx + look_ahead < len(instructions):
+                            next_insn = instructions[idx + look_ahead]
+                            if next_insn.mnemonic == "cmp":
+                                cmp_parts = [p.strip() for p in next_insn.op_str.split(",")]
+                                if len(cmp_parts) == 2 and cmp_parts[0] == parts[0]:
+                                    validators.add(insn.mnemonic.upper())
+                                    break
+        
+        for v in validators:
+            result["validators"].append(f"{v} loop")
 
     def _scan_function_dispatch(self, instructions: List[Any], result: Dict[str, Any]) -> None:
         """Looks for calls/jumps via function tables (e.g. call qword ptr [rax + rcx*8])."""

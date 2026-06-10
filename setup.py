@@ -20,6 +20,7 @@ setup(
         "pyelftools>=0.29",
         "pefile>=2023.2.7",
         "macholib>=1.16.2",
+        "unicorn>=2.0.1",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

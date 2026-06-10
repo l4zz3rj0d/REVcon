@@ -10,17 +10,24 @@ from revcon.modules.heuristics import ReverseEngineeringHeuristics
 from revcon.modules.entropy import EntropyAnalysis
 from revcon.modules.predictor import ChallengeTypePredictor
 from revcon.modules.flags import FlagIntelligence
+from revcon.modules.emulation import EmulationEngine
+from revcon.modules.runtime.tracer import RuntimeTracer
+from revcon.modules.runtime.payload_detector import PayloadDetector
+from revcon.modules.reasoning.hypothesis import HypothesisEngine
+from revcon.modules.reasoning.educator import EducationalGuidance
 from revcon.plugins import load_plugins
 from revcon.utils import log_verbose
 
 class AnalysisEngine:
     """Core analysis orchestrator that drives all intelligence, heuristics, and plugin checks."""
 
-    def __init__(self, filepath: str, quick: bool = False, verbose: bool = False, flag_format: Optional[str] = None):
+    def __init__(self, filepath: str, quick: bool = False, verbose: bool = False, flag_format: Optional[str] = None, dynamic: bool = False, dump_payloads: bool = False):
         self.filepath = filepath
         self.quick = quick
         self.verbose = verbose
         self.flag_format = flag_format
+        self.dynamic = dynamic
+        self.dump_payloads = dump_payloads
 
     def run(self) -> Dict[str, Any]:
         """Runs the analysis pipeline."""
@@ -98,6 +105,31 @@ class AnalysisEngine:
                 "has_high_entropy": False
             }
 
+        # 8.5 Emulation / Constant Reconstruction
+        emulation_intel = {}
+        if not self.quick:
+            log_verbose("[*] Reconstructing constants via static emulation...", self.verbose)
+            heuristics_module = ReverseEngineeringHeuristics(self.filepath, binary_intel["arch"], binary_intel["bitness"], binary_intel["format"], strings_intel["all_strings"], self.verbose)
+            code_bytes, base_addr = heuristics_module._extract_code_segment()
+            if code_bytes:
+                emu_module = EmulationEngine(self.filepath, binary_intel["arch"], binary_intel["bitness"], code_bytes, base_addr)
+                emulation_intel = emu_module.analyze()
+
+        # 8.6 Runtime Analysis
+        runtime_intel = {}
+        payload_intel = {}
+        if self.dynamic:
+            log_verbose("[*] Running Dynamic Trace Analysis (strace/ltrace)...", self.verbose)
+            tracer = RuntimeTracer(self.filepath)
+            runtime_intel = tracer.trace()
+            
+            payload_det = PayloadDetector(runtime_intel)
+            payload_intel = payload_det.detect()
+            
+            # Simulated payload dumping logic
+            if self.dump_payloads and payload_intel.get("hidden_payload_detected"):
+                log_verbose("[*] Extracting hidden payloads to disk (Simulated)...", self.verbose)
+                
         # Assemble full metadata for predictor & plugins
         metadata = {
             "binary_intel": binary_intel,
@@ -110,7 +142,10 @@ class AnalysisEngine:
             },
             "security": security_intel,
             "heuristics": heuristics_intel,
-            "entropy": entropy_intel
+            "entropy": entropy_intel,
+            "emulation": emulation_intel,
+            "runtime_tracer": runtime_intel,
+            "runtime_payload": payload_intel
         }
 
         # 9. Challenge Type Predictor
@@ -138,16 +173,33 @@ class AnalysisEngine:
         # 11. Flag Intelligence (if format specified)
         if self.flag_format:
             log_verbose(f"[*] Running Flag Intelligence for format: {self.flag_format}", self.verbose)
+            
+            # Combine static strings with dynamically reconstructed strings
+            extended_strings = list(strings_intel.get("all_strings", []))
+            for b in emulation_intel.get("reconstructed_buffers", []):
+                extended_strings.append(b.get("ascii", ""))
+                
             flag_module = FlagIntelligence(
                 self.flag_format,
-                strings_intel.get("all_strings", []),
+                extended_strings,
                 symbols_intel.get("all_symbols", [])
             )
             metadata["flag_intel"] = flag_module.analyze()
         else:
             metadata["flag_intel"] = None
 
-        # 12. Generate Analyst Guidance / Next Steps
+        # 12. Hypothesis Engine
+        log_verbose("[*] Generating automated hypotheses...", self.verbose)
+        hyp_engine = HypothesisEngine(metadata)
+        metadata["hypotheses"] = hyp_engine.generate()
+        
+        # 13. RE Scorecard & Roadmap
+        log_verbose("[*] Generating roadmap and scorecard...", self.verbose)
+        edu_engine = EducationalGuidance(metadata)
+        metadata["roadmap"] = edu_engine.generate_roadmap()
+        metadata["scorecard"] = edu_engine.generate_scorecard()
+
+        # 14. Generate Analyst Guidance / Next Steps
         metadata["analyst_guidance"] = self._generate_guidance(metadata)
 
         return metadata

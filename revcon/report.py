@@ -268,6 +268,42 @@ class ReportGenerator:
                 else:
                     print(f"  {C.B}{C.W}Partial Matches:{C.RST} {C.GR}None{C.RST}")
 
+        # ── runtime payload ───────────────────────────────────────────
+        payload = self.metadata.get("runtime_payload", {})
+        if payload.get("hidden_payload_detected"):
+            self._section("HIDDEN PAYLOAD DETECTED", orbital=True)
+            for f in payload.get("payload_findings", []):
+                if nc:
+                    print(f"    - {f['description']} at {f['address']}")
+                else:
+                    print(f"  {C.R}\u25cf{C.RST} {C.R}{f['description']}{C.RST} at {C.B}{f['address']}{C.RST}")
+
+        # ── emulation buffers ─────────────────────────────────────────
+        emulation = self.metadata.get("emulation", {})
+        buffers = emulation.get("reconstructed_buffers", [])
+        if buffers:
+            self._section("RECONSTRUCTED CONSTANTS", orbital=True)
+            for b in buffers:
+                if nc:
+                    print(f"    - {b['ascii']} (at {b['start_addr']})")
+                else:
+                    print(f"  {C.G}\u25cf{C.RST} {C.W}Reconstructed String:{C.RST} {C.G}{C.B}{b['ascii']}{C.RST} {C.DIM}(at {b['start_addr']}){C.RST}")
+
+        # ── hypotheses ────────────────────────────────────────────────
+        hypotheses = self.metadata.get("hypotheses", [])
+        if hypotheses:
+            self._section("AUTOMATED HYPOTHESES", orbital=True)
+            for idx, hyp in enumerate(hypotheses, 1):
+                desc = hyp.get("description", "")
+                conf = hyp.get("confidence", 0)
+                reco = hyp.get("recommendation", "")
+                if nc:
+                    print(f"    Hypothesis #{idx} ({conf}% confidence): {desc}")
+                    print(f"      Recommendation: {reco}")
+                else:
+                    print(f"  {C.Y}{C.B}[Hypothesis #{idx}]{C.RST} {C.W}{desc}{C.RST} {C.GR}({conf}% Confidence){C.RST}")
+                    print(f"    {C.GR}\u2514\u2500{C.RST} {C.G}Recommendation: {reco}{C.RST}")
+
         # ── analyst summary ───────────────────────────────────────────
         guidance = self.metadata.get("analyst_guidance", {})
 
@@ -318,3 +354,32 @@ class ReportGenerator:
             print(f"  {'='*60}\n")
         else:
             print(f"  {C.Y}{C.B}{'='*60}{C.RST}\n")
+
+        # ── investigation roadmap ─────────────────────────────────────
+        roadmap = self.metadata.get("roadmap", [])
+        if roadmap:
+            if nc:
+                print(f"  === Investigation Roadmap ===")
+            else:
+                print(f"  {C.R}{C.B}=== Investigation Roadmap ==={C.RST}")
+            for step in roadmap:
+                if nc:
+                    print(f"  {step}")
+                else:
+                    print(f"  {C.W}{step}{C.RST}")
+            print()
+
+        # ── RE scorecard ──────────────────────────────────────────────
+        scorecard = self.metadata.get("scorecard", {})
+        if scorecard:
+            if nc:
+                print(f"  === RE Scorecard ===")
+            else:
+                print(f"  {C.R}{C.B}=== RE Scorecard ==={C.RST}")
+            for k, v in scorecard.items():
+                if nc:
+                    print(f"  {k:<22} {v}")
+                else:
+                    vc = C.R if v in ("High", "Detected", "Advanced") else C.G if v in ("Low", "Not Detected", "Beginner") else C.Y
+                    print(f"  {C.GR}{k:<22}{C.RST} {vc}{v}{C.RST}")
+            print()
