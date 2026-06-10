@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.11+-blue?style=flat-square&logo=python&logoColor=white"/>
-  <img src="https://img.shields.io/badge/version-1.0.0-red?style=flat-square"/>
+  <img src="https://img.shields.io/badge/version-1.2.0-red?style=flat-square"/>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey?style=flat-square"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"/>
 </p>
@@ -12,18 +12,16 @@
 <h1 align="center">REVcon</h1>
 
 <p align="center">
-  Automated reconnaissance and triage framework for reverse engineering. Analyze a binary before you open a disassembler. Drop a file. Get intelligence.
+  Automated reconnaissance, triage, and intelligence framework for reverse engineering. Analyze a binary before you open a disassembler. Drop a file. Get intelligence.
 </p>
 
 ---
 
 ## What It Does
 
-REVcon performs deep static reconnaissance on ELF, PE, and Mach-O binaries and produces a structured intelligence report covering format metadata, security mitigations, language detection, symbol ranking, string categorization, import mapping, assembly-level heuristics, section entropy, and challenge type prediction. The output is a color-coded terminal dashboard or a machine-readable JSON report — ready to guide your first moves in Ghidra, IDA Pro, Binary Ninja, Cutter, or Radare2.
+REVcon performs deep static and dynamic reconnaissance on ELF, PE, and Mach-O binaries and shared libraries. It constructs a structured, color-coded intelligence report grouped into 11 distinct attack surfaces designed to guide your first moves in a disassembler (Ghidra, IDA Pro, Binary Ninja, Cutter). 
 
-It runs two analysis layers: lightweight header and string parsing for fast triage, and optional Capstone-powered disassembly scanning for deeper heuristics like XOR loop detection, per-character validation, function dispatch tables, and expected input length extraction. When analysis finishes, it classifies the binary's likely challenge type and generates targeted analyst recommendations.
-
-REVcon is not an automated solver. It does not brute force, exploit, or execute the target. It provides intelligence and guidance.
+Instead of dumping raw metadata, REVcon behaves as a reverse-engineering assistant by ranking internal functions, tracing relationship structures, reconstructing obfuscated constants, resolving environment variables, and flagging dynamic payload loaders.
 
 ---
 
@@ -57,136 +55,61 @@ revcon <binary> [options]
 | Flag | Short | Default | Description |
 |---|---|---|---|
 | `--quick` | `-q` | off | Skip Capstone disassembly heuristics and entropy analysis |
-| `--verbose` | `-v` | off | Show all internal debug and module logs |
-
-### Output
-
-| Flag | Short | Description |
-|---|---|---|
-| `--json` | `-j` | Output full findings as raw JSON to stdout |
-
-### Flag Intelligence
-
-| Flag | Short | Description |
-|---|---|---|
-| `--flag-format` | `-F` | Search for a flag format across strings, symbols, and base64 candidates. Example: `"FLAG{}"`, `"PREFIX{}"`, `"CUSTOM{}"` |
+| `--verbose` | `-v` | off | Show all internal logs and display hidden compiler boilerplate symbols |
+| `--json` | `-j` | off | Output full findings as raw JSON to stdout |
+| `--flag-format` | `-F` | None | Search for a flag format across strings, symbols, and base64 candidates. Example: `"FLAG{}"` |
 
 ---
 
 ## Examples
 
 ```bash
-# Standard analysis
+# Standard static reconnaissance
 revcon chall.bin
 
-# Quick triage (skips disassembly and entropy)
-revcon crackme -q
+# Run with dynamic analysis tracer (DANGEROUS EXECUTION)
+revcon chall.bin -D
 
-# JSON export for downstream tooling
+# Export JSON report for external parsers
 revcon target.exe -j > intel.json
 
-# Search for FLAG format
+# Scan for custom flag formats
 revcon challenge -F "FLAG{}"
-
-# Search for custom CTF flag format with verbose output
-revcon binary -F "PREFIX{}" -v
-
-# Quick scan with flag search
-revcon packed.bin -q -F "FLAG{}"
 ```
 
 ---
 
-## Analysis Modules
+## Analysis Modules & Features
 
-### Binary Intelligence
+### 1. Dynamic Function Discovery & Noise Filtering
+Crawl symbol tables, dynamic symbols, PLT/imports, and discovered call targets recursively to map all internal subroutines. Automatically filters out compiler-generated boilerplate noise (e.g. `_start`, `frame_dummy`, `_init`, `_fini`) by default to keep the focus purely on user-defined code.
 
-Parses ELF, PE, and Mach-O headers. Reports format, architecture (x86, x64, ARM, ARM64, MIPS), bitness, endianness, compiler signatures (GCC, MSVC, Clang), and GNU Build ID.
+### 2. Interesting Function Scoring & Ranking
+Scores functions based on logic complexity and high-interest API calls. Ranks subroutines dynamically to surface target validation loops, crypto, dynamic loaders, and debugger bypass points. Score metrics:
+- **mmap/mprotect/VirtualAlloc**: +45
+- **ptrace/anti-debug**: +45
+- **crypt/decrypt/aes/rc4**: +40
+- **dlopen/dlsym**: +35
+- **getenv**: +30
+- **strcmp/memcmp**: +25
 
-### Security Analysis
+### 3. Environment Variable Backtracking
+Static argument backtracking scans registers and offset parameters preceding `getenv` calls to extract required environment variable names (e.g. `SAT_PROD_ENVIRONMENT`). Extracted names are automatically exported to the runtime execution environment.
 
-Audits mitigation technologies directly from binary structure: NX, Stack Canary, RELRO (Partial/Full), PIE, Fortify Source, and ASLR compatibility. Each finding includes a beginner-friendly explanation.
+### 4. Runtime Payload Analysis Engine
+Traces dynamic memory mappings and permissions. Highlights execution blocks allocating `PROT_EXEC` (7) space or invoking writes into executable segments (suspicious self-modifying code or unpacked runtime payloads).
 
-### Language Detection
+### 5. Library Intelligence & Relationship Surface
+Provides deep triage for library files (`.so`, `.dll`, `.dylib`), exposing non-boilerplate exports, suspicious exports, and likely entry points. A visual relationship tree diagrams import/export linkages.
 
-Matches binary signatures against Rust, Go, C++, Zig, and C compiler runtimes using a weighted indicator matrix. Reports detected language and confidence percentage.
+### 6. Visually Filtered Call Graph
+Traces function dependency trees starting from `main` or custom library export targets, hiding boilerplate code execution paths.
 
-### Symbol Intelligence
+### 7. Suspicious Constant Recovery
+Reconstructs stack-constructed strings and single-byte cipher arrays (XOR/ADD/SUB). Utilizes heuristic entropy and repetition filtering to drop padding-based false positives.
 
-Extracts function symbols from `.symtab` and `.dynsym` sections. Demangles C++ names. Ranks symbols by reverse engineering interest (flag, check, verify, validate, decrypt, encrypt, password, secret, auth, token, main) and produces a High Value Targets list.
-
-### String Intelligence
-
-Extracts ASCII and UTF-16 wide strings. Categorizes into: Flag Indicators, Error Messages, Success Messages, Passwords, URLs, IP Addresses, File Paths, Registry Keys, Commands.
-
-### Import Intelligence
-
-Cross-references dynamic imports (strcmp, strncmp, memcmp, scanf, gets, fgets, read, write, printf, puts, rand, srand, time) against a CTF/reversing relevance database and explains each match.
-
-### Reverse Engineering Heuristics
-
-Uses Capstone disassembly to scan the `.text` section for:
-
-- **Length Checks** — `cmp rsi, XX` patterns indicating expected input length
-- **Per-Character Validation** — `cmp al, XX` loops checking individual bytes
-- **Function Dispatch Tables** — `call qword ptr [...]` or `jmp qword ptr [...]` dynamic dispatch
-- **XOR Loops** — Backward conditional jumps containing `xor reg, imm` (decryption/obfuscation)
-- **Base64 Tables** — Full base64 alphabet present in string pool
-- **Crypto Constants** — MD5, SHA1, SHA256 initialization vectors in code/data segments
-- **Packed Binary** — UPX signatures and non-standard section names
-
-### Entropy Analysis
-
-Calculates Shannon entropy for each binary section. Flags sections above 7.0 as likely encrypted, compressed, or packed.
-
-### Challenge Type Predictor
-
-Scores all collected indicators against a weighted matrix to predict the likely challenge type: Password Check, Crackme, XOR Challenge, Crypto Challenge, Validation Challenge, Packed Binary, or License Check. Reports type and confidence percentage.
-
-### Flag Intelligence
-
-Activated with `-F` / `--flag-format`. Converts a format like `FLAG{}` into the regex `FLAG\{.*?\}` and searches strings, symbols, and decoded base64 candidates. Reports direct matches, partial fragment matches (prefix, `flag`, `secret`, `token`), and an overall confidence level (HIGH / MEDIUM / LOW).
-
-### Recommendation Engine
-
-Synthesizes all findings into a targeted analyst summary: detected language, predicted challenge type, expected input length, primary target functions, analysis strategies tailored to the compiler/runtime, and a concrete recommended next step.
-
----
-
-## Plugin System
-
-REVcon dynamically loads any Python module placed in `revcon/plugins/` that inherits from `BasePlugin`. Two plugins ship by default:
-
-- **XOR Detector** — Searches for XOR decryption loop markers and keywords.
-- **Crypto Detector** — Searches for cryptographic constants, imports, and library API calls.
-
-### Writing a Plugin
-
-```python
-from typing import Dict, Any
-from revcon.plugins.base import BasePlugin
-
-class CustomDetector(BasePlugin):
-    @property
-    def name(self) -> str:
-        return "Custom Detector"
-
-    @property
-    def description(self) -> str:
-        return "Scans for custom indicators."
-
-    def run(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
-        findings = []
-        # Access metadata["strings"], metadata["symbols"], etc.
-        return {"detected": len(findings) > 0, "findings": findings}
-```
-
----
-
-## Output Formats
-
-- **Terminal** — Color-coded dashboard with section frames, inline explanations, and analyst summary.
-- **JSON** — Full-fidelity structured report with all metadata, categories, and plugin findings. Pipe directly into downstream tooling.
+### 8. Analyst Mode ("Why This Matters")
+Presents professional reverse-engineering guidance under each surface to detail the threat significance of findings and guide analysts to their next debug actions.
 
 ---
 
@@ -194,12 +117,6 @@ class CustomDetector(BasePlugin):
 
 - Python 3.11+
 - `colorama`, `capstone`, `pyelftools`, `pefile`, `macholib`
-
----
-
-## Roadmap
-
-See [docs/roadmap.md](docs/roadmap.md) for Version 1.0, 2.0, and 3.0 plans.
 
 ---
 
