@@ -15,6 +15,7 @@ from revcon.modules.runtime.tracer import RuntimeTracer
 from revcon.modules.runtime.payload_detector import PayloadDetector
 from revcon.modules.reasoning.hypothesis import HypothesisEngine
 from revcon.modules.reasoning.educator import EducationalGuidance
+from revcon.modules.ranking import FunctionRanker
 from revcon.plugins import load_plugins
 from revcon.utils import log_verbose
 
@@ -130,6 +131,16 @@ class AnalysisEngine:
             if self.dump_payloads and payload_intel.get("hidden_payload_detected"):
                 log_verbose("[*] Extracting hidden payloads to disk (Simulated)...", self.verbose)
                 
+        # 8.7 Suspicious Function Ranking
+        ranked_functions = []
+        if not self.quick:
+            log_verbose("[*] Ranking Suspicious Functions...", self.verbose)
+            heuristics_module = ReverseEngineeringHeuristics(self.filepath, binary_intel["arch"], binary_intel["bitness"], binary_intel["format"], strings_intel["all_strings"], self.verbose)
+            code_bytes, base_addr = heuristics_module._extract_code_segment()
+            if code_bytes:
+                ranker = FunctionRanker(self.filepath, binary_intel["arch"], binary_intel["bitness"], binary_intel["format"])
+                ranked_functions = ranker.analyze(code_bytes, base_addr, {})
+
         # Assemble full metadata for predictor & plugins
         metadata = {
             "binary_intel": binary_intel,
@@ -145,7 +156,8 @@ class AnalysisEngine:
             "entropy": entropy_intel,
             "emulation": emulation_intel,
             "runtime_tracer": runtime_intel,
-            "runtime_payload": payload_intel
+            "runtime_payload": payload_intel,
+            "ranked_functions": ranked_functions
         }
 
         # 9. Challenge Type Predictor

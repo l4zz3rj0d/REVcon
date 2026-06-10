@@ -69,7 +69,7 @@ revcon <binary> [options]
 
 | Flag | Short | Description |
 |---|---|---|
-| `--flag-format` | `-F` | Search for a flag format across strings, symbols, and base64 candidates. Example: `"HTB{}"`, `"FLAG{}"`, `"DUCTF{}"` |
+| `--flag-format` | `-F` | Search for a flag format across strings, symbols, and base64 candidates. Example: `"FLAG{}"`, `"PREFIX{}"`, `"CUSTOM{}"` |
 
 ---
 
@@ -85,11 +85,11 @@ revcon crackme -q
 # JSON export for downstream tooling
 revcon target.exe -j > intel.json
 
-# Search for HTB flag format
-revcon challenge -F "HTB{}"
+# Search for FLAG format
+revcon challenge -F "FLAG{}"
 
 # Search for custom CTF flag format with verbose output
-revcon binary -F "DUCTF{}" -v
+revcon binary -F "PREFIX{}" -v
 
 # Quick scan with flag search
 revcon packed.bin -q -F "FLAG{}"
@@ -145,7 +145,7 @@ Scores all collected indicators against a weighted matrix to predict the likely 
 
 ### Flag Intelligence
 
-Activated with `-F` / `--flag-format`. Converts a format like `HTB{}` into the regex `HTB\{.*?\}` and searches strings, symbols, and decoded base64 candidates. Reports direct matches, partial fragment matches (prefix, `flag`, `secret`, `token`), and an overall confidence level (HIGH / MEDIUM / LOW).
+Activated with `-F` / `--flag-format`. Converts a format like `FLAG{}` into the regex `FLAG\{.*?\}` and searches strings, symbols, and decoded base64 candidates. Reports direct matches, partial fragment matches (prefix, `flag`, `secret`, `token`), and an overall confidence level (HIGH / MEDIUM / LOW).
 
 ### Recommendation Engine
 

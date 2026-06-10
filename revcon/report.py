@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 from revcon.banner import C, _no_color, _strip
 
 class ReportGenerator:
-    """Formats and prints binary reconnaissance findings to the terminal or exports to JSON."""
+    """Formats and prints binary reconnaissance findings using the Attack Surface methodology."""
 
     def __init__(self, metadata: Dict[str, Any]):
         self.metadata = metadata
@@ -47,339 +47,173 @@ class ReportGenerator:
     # ── main terminal render ──────────────────────────────────────────
 
     def render_terminal(self) -> None:
-        """Renders a Spider-style CLI report with sections and orbital HUD rows."""
+        """Renders the Attack Surface Discovery report."""
         nc = self._nc
 
         intel = self.metadata.get("binary_intel", {})
         lang = self.metadata.get("language", {})
-        predicted = self.metadata.get("predicted_challenge", {})
-
-        # ── target metadata ───────────────────────────────────────────
-        self._section("TARGET METADATA", orbital=True)
-        self._row("File Size", f"{intel.get('file_size', 0)} bytes")
-        self._row("Format", intel.get('format', 'Unknown'), value_colour=C.G)
-        self._row("Architecture", f"{intel.get('arch', 'Unknown')} ({intel.get('bitness', 'Unknown')})")
-        self._row("Endianness", intel.get('endianness', 'Unknown'))
-        self._row("Compiler", intel.get('compiler', 'Unknown'))
-        self._row("Build Info", intel.get('build_info', 'Unknown'))
-        self._row("Language", f"{lang.get('language', 'Unknown')} ({lang.get('confidence', 0)}%)", value_colour=C.Y)
-        self._row("Challenge Type", f"{predicted.get('type', 'Unknown')} ({predicted.get('confidence', 0)}%)", value_colour=C.MG)
-
-        # ── security mitigations ──────────────────────────────────────
         sec = self.metadata.get("security", {})
-        if sec:
-            self._section("SECURITY MITIGATIONS", orbital=True)
-            for mitigation, details in sec.items():
-                status = details.get("status", "Unknown")
-                enabled = details.get("enabled", False)
-                explanation = details.get("explanation", "")
-
-                if "enabled" in status.lower() or "found" in status.lower() or "full" in status.lower():
-                    sc = C.G
-                elif "disabled" in status.lower() or "no " in status.lower():
-                    sc = C.R
-                elif "partial" in status.lower():
-                    sc = C.Y
-                else:
-                    sc = C.W
-
-                if nc:
-                    print(f"    {mitigation:<8}: {status:<30}")
-                    print(f"      \u2514\u2500 {explanation}")
-                else:
-                    print(f"  {sc}\u25cf{C.RST} {C.W}{mitigation:<8}{C.RST}  {sc}{status:<30}{C.RST}")
-                    print(f"    {C.GR}\u2514\u2500 {explanation}{C.RST}")
-
-        # ── heuristics ────────────────────────────────────────────────
         heuristics = self.metadata.get("heuristics", {})
-        self._section("REVERSE ENGINEERING HEURISTICS", orbital=True)
-
-        length = heuristics.get("expected_input_length")
-        self._row("Input Length", str(length) if length else "None detected",
-                  value_colour=C.G if length else C.GR)
-
-        char_val = heuristics.get("per_character_validation", False)
-        self._row("Per-Char Validation", "Yes (character-by-character loops)" if char_val else "No",
-                  value_colour=C.G if char_val else C.GR)
-
-        dispatch = heuristics.get("function_dispatch_table", False)
-        self._row("Function Dispatch", "Yes (dispatch tables / dynamic jumps)" if dispatch else "No",
-                  value_colour=C.Y if dispatch else C.GR)
-
-        xor = heuristics.get("xor_loops_detected", False)
-        self._row("XOR Loops", "Yes (XOR decryption/obfuscation)" if xor else "No",
-                  value_colour=C.R if xor else C.GR)
-
-        b64 = heuristics.get("base64_detected", False)
-        self._row("Base64 Routine", "Yes (base64 character map present)" if b64 else "No",
-                  value_colour=C.G if b64 else C.GR)
-
-        crypto = heuristics.get("crypto_signatures", [])
-        self._row("Crypto Algorithms", ", ".join(crypto) if crypto else "None",
-                  value_colour=C.Y if crypto else C.GR)
-
-        packed = heuristics.get("packed_binary", False)
-        self._row("Packed Binary", "Yes (UPX / packed indicators)" if packed else "No",
-                  value_colour=C.R if packed else C.GR)
-
-        # ── section entropy ───────────────────────────────────────────
         entropy = self.metadata.get("entropy", {})
-        sections = entropy.get("sections", [])
-        if sections:
-            self._section("SECTION ENTROPY", orbital=True)
-            if nc:
-                print(f"    {'Section':<15} {'Size (Bytes)':<15} {'Entropy':<10} {'Status':<30}")
-                print(f"    {'-'*15} {'-'*15} {'-'*10} {'-'*30}")
-            else:
-                print(f"  {C.GR}{'Section':<15} {'Size':<15} {'Entropy':<10} {'Status'}{C.RST}")
-                print(f"  {C.GR}{'\u2500'*60}{C.RST}")
-
-            for sec_data in sections:
-                ent = sec_data.get("entropy", 0.0)
-                status = sec_data.get("status", "")
-                name = sec_data.get("name", "Unknown")
-                size = sec_data.get("size", 0)
-
-                if ent > 7.2:
-                    ec = C.R + C.B
-                elif ent > 6.0:
-                    ec = C.Y
-                else:
-                    ec = C.GR
-
-                if nc:
-                    print(f"    {name:<15} {size:<15} {ent:<10.4f} {status}")
-                else:
-                    print(f"  {ec}{name:<15} {size:<15} {ent:<10.4f} {status}{C.RST}")
-
-        # ── imports ───────────────────────────────────────────────────
         imports = self.metadata.get("imports", {})
-        flagged_imports = imports.get("flagged_imports", {})
-        if flagged_imports:
-            self._section("HIGH RELEVANCE IMPORTS", orbital=True)
-            for imp_name, desc in flagged_imports.items():
-                if nc:
-                    print(f"    {imp_name:<12} \u2192 {desc}")
-                else:
-                    print(f"  {C.Y}\u25cf{C.RST} {C.Y}{imp_name:<12}{C.RST} {C.GR}\u2192{C.RST} {C.W}{desc}{C.RST}")
-
-        # ── symbols ───────────────────────────────────────────────────
-        symbols = self.metadata.get("symbols", {})
-        hvt = symbols.get("high_value_targets", [])
-        if hvt:
-            self._section("HIGH VALUE TARGETS", orbital=True)
-            for i, target in enumerate(hvt, 1):
-                if nc:
-                    print(f"    {i}. {target}")
-                else:
-                    print(f"  {C.G}\u25b8{C.RST} {C.G}{target}{C.RST}")
-
-        # ── categorized strings ───────────────────────────────────────
         strings = self.metadata.get("strings", {})
+        runtime = self.metadata.get("runtime_tracer", {})
+        payload = self.metadata.get("runtime_payload", {})
+        ranked_functions = self.metadata.get("ranked_functions", [])
+
+        if nc:
+            print(f"\n  {'='*60}")
+            print(f"   REVERSE ENGINEERING ATTACK SURFACE")
+            print(f"  {'='*60}")
+        else:
+            print(f"\n  {C.R}{C.B}{'='*60}{C.RST}")
+            print(f"  {C.R}{C.B} REVERSE ENGINEERING ATTACK SURFACE{C.RST}")
+            print(f"  {C.R}{C.B}{'='*60}{C.RST}")
+
+        # ── 1. Binary Surface ─────────────────────────────────────────
+        self._section("Binary Surface", orbital=True)
+        self._row("Type", intel.get('format', 'Unknown'))
+        self._row("Architecture", f"{intel.get('arch', 'Unknown')} ({intel.get('bitness', 'Unknown')})")
+        self._row("Language", lang.get('language', 'Unknown'))
+        self._row("Compiler", intel.get('compiler', 'Unknown'))
+        
+        prots = [k for k, v in sec.items() if v.get("enabled")]
+        self._row("Protections", ", ".join(prots) if prots else "None")
+
+        # ── 2. Code Surface ───────────────────────────────────────────
+        if ranked_functions:
+            self._section("Code Surface", orbital=True)
+            self._row("Total Functions", str(len(ranked_functions)))
+            # The top suspicious functions will be printed later in the ranked list
+            
+        # ── 3. String Surface ─────────────────────────────────────────
         categories = strings.get("categories", {})
         has_strings = any(len(lst) > 0 for lst in categories.values())
-
         if has_strings:
-            self._section("INTERESTING STRINGS", orbital=True)
+            self._section("String Surface", orbital=True)
             for cat_name, lst in categories.items():
                 if lst:
-                    title = cat_name.replace("_", " ").upper()
+                    title = cat_name.replace("_", " ").title()
                     if nc:
                         print(f"    [{title}]")
+                        for s in lst[:3]:
+                            print(f"      \u2022 {s}")
                     else:
-                        print(f"  {C.R}{C.B}[{title}]{C.RST}")
-                    for s in lst[:5]:
-                        short = s if len(s) < 80 else s[:77] + "..."
-                        if nc:
-                            print(f"      \u2022 {short}")
-                        else:
-                            print(f"    {C.GR}\u2514\u2500{C.RST} {C.W}{short}{C.RST}")
-                    if len(lst) > 5:
-                        if nc:
-                            print(f"      ... ({len(lst) - 5} more hidden)")
-                        else:
-                            print(f"    {C.GR}   ... ({len(lst) - 5} more hidden. Use --verbose to see all){C.RST}")
+                        print(f"  {C.R}\u25cf{C.RST} {C.W}{title}{C.RST}")
+                        for s in lst[:3]:
+                            print(f"    {C.GR}\u2514\u2500{C.RST} {C.G}{s}{C.RST}")
 
-        # ── plugin findings ───────────────────────────────────────────
-        plugin_findings = self.metadata.get("plugin_findings", {})
-        has_detections = any(res.get("detected", False) for res in plugin_findings.values())
-        if has_detections:
-            self._section("PLUGIN DETECTIONS", orbital=True)
-            for p_name, res in plugin_findings.items():
-                if res.get("detected", False):
-                    if nc:
-                        print(f"    [{p_name}]")
-                    else:
-                        print(f"  {C.MG}\u25c8{C.RST} {C.B}{C.W}{p_name}{C.RST}")
-                    for finding in res.get("findings", []):
-                        if nc:
-                            print(f"      - {finding}")
-                        else:
-                            print(f"    {C.GR}\u2514\u2500{C.RST} {C.W}{finding}{C.RST}")
+        # ── 4. Import Surface ─────────────────────────────────────────
+        flagged_imports = imports.get("flagged_imports", {})
+        if flagged_imports:
+            self._section("Import Surface", orbital=True)
+            for imp_name, desc in list(flagged_imports.items())[:5]:
+                if nc:
+                    print(f"    {imp_name:<15} \u2192 {desc}")
+                else:
+                    print(f"  {C.Y}\u25cf{C.RST} {C.Y}{imp_name:<15}{C.RST} {C.GR}\u2192{C.RST} {C.W}{desc}{C.RST}")
 
-        # ── flag intelligence ─────────────────────────────────────────
+        # ── 5. Runtime Surface ────────────────────────────────────────
+        if runtime:
+            self._section("Runtime Surface", orbital=True)
+            self._row("Dynamic Loading", "Yes" if runtime.get("ltrace", {}).get("events") else "No")
+            self._row("Executable Memory", "Yes" if payload.get("hidden_payload_detected") else "No")
+            
+        # ── 6. Validation Surface ─────────────────────────────────────
+        self._section("Validation Surface", orbital=True)
+        char_val = heuristics.get("per_character_validation", False)
+        self._row("Per-Char Loops", "Detected" if char_val else "Not Detected", value_colour=C.R if char_val else C.G)
+        self._row("Validation Routines", "Detected" if heuristics.get("validators") else "Not Detected", value_colour=C.R if heuristics.get("validators") else C.G)
+
+        # ── 7. Crypto Surface ─────────────────────────────────────────
+        crypto = heuristics.get("crypto_signatures", [])
+        if crypto or heuristics.get("base64_detected"):
+            self._section("Crypto Surface", orbital=True)
+            if crypto:
+                self._row("Algorithms", ", ".join(crypto))
+            if heuristics.get("base64_detected"):
+                self._row("Encoding", "Base64 Routine Detected")
+        
+        # ── 8. Network Surface ────────────────────────────────────────
+        net_str = categories.get("urls", []) + categories.get("ips", [])
+        if net_str:
+            self._section("Network Surface", orbital=True)
+            if categories.get("domains"):
+                self._row("Domains", ", ".join(categories["domains"][:2]))
+            if categories.get("urls"):
+                self._row("URLs", ", ".join(categories["urls"][:2]))
+                
+        # ── 9. Anti-Analysis Surface ──────────────────────────────────
+        anti_debug = False
+        for e in runtime.get("strace", {}).get("events", []):
+            if e["type"] == "ptrace":
+                anti_debug = True
+                break
+        
+        if anti_debug or "ptrace" in flagged_imports:
+            self._section("Anti-Analysis Surface", orbital=True)
+            self._row("Debugger Detection", "Present (ptrace)", value_colour=C.R)
+
+        # ── 10. Hooking Surface ───────────────────────────────────────
+        # Minimal hooking surface for now, based on heuristics
+        if heuristics.get("function_dispatch_table"):
+            self._section("Hooking Surface", orbital=True)
+            self._row("Dynamic Dispatch", "Detected", value_colour=C.R)
+
+        # ── 11. Obfuscation Surface ───────────────────────────────────
+        packed = heuristics.get("packed_binary", False)
+        xor = heuristics.get("xor_loops_detected", False)
+        if packed or xor or payload.get("hidden_payload_detected"):
+            self._section("Obfuscation Surface", orbital=True)
+            if payload.get("hidden_payload_detected"):
+                self._row("Runtime Unpacking", "Suspected (High Confidence)", value_colour=C.R)
+            elif packed:
+                self._row("Packing", "Detected", value_colour=C.R)
+            if xor:
+                self._row("XOR Obfuscation", "Detected", value_colour=C.O)
+
+        # ── Top Suspicious Functions ──────────────────────────────────
+        if ranked_functions:
+            self._section("Top Suspicious Functions", orbital=True)
+            for i, func in enumerate(ranked_functions[:5], 1):
+                name = func["name"]
+                score = func["score"]
+                reasons = ", ".join(func["reasons"])
+                if nc:
+                    print(f"    #{i} {name}")
+                    print(f"      Score: {score}")
+                    print(f"      Reason: {reasons}")
+                else:
+                    print(f"  {C.R}#{i} {C.B}{name}{C.RST}")
+                    print(f"    {C.GR}\u251c\u2500{C.RST} Score: {C.O}{score}{C.RST}")
+                    print(f"    {C.GR}\u2514\u2500{C.RST} Reason: {C.W}{reasons}{C.RST}\n")
+
+        # ── Universal Flag Intelligence ───────────────────────────────
         flag_intel = self.metadata.get("flag_intel")
         if flag_intel:
-            self._section("FLAG INTELLIGENCE", orbital=True)
-            self._row("Target Format", flag_intel.get("flag_format", "N/A"))
-            self._row("Search Regex", flag_intel.get("regex", "N/A"))
-
-            confidence = flag_intel.get("confidence", "LOW")
-            conf_colour = C.G if confidence == "HIGH" else C.Y if confidence == "MEDIUM" else C.R
-            self._row("Confidence", confidence, value_colour=conf_colour)
-
+            self._section("Universal Flag Intelligence", orbital=True)
             matches = flag_intel.get("matches", [])
+            partials = flag_intel.get("partial_matches", [])
             if matches:
-                if nc:
-                    print(f"    Direct Matches:")
-                else:
-                    print(f"\n  {C.B}{C.W}Direct Matches:{C.RST}")
+                self._row("Direct Matches", str(len(matches)), value_colour=C.G)
                 for m in matches:
                     if nc:
                         print(f"      {m}")
                     else:
                         print(f"    {C.G}\u25b8{C.RST} {C.G}{m}{C.RST}")
-            else:
-                if nc:
-                    print(f"    Direct Matches:  None")
-                else:
-                    print(f"\n  {C.B}{C.W}Direct Matches:{C.RST}  {C.GR}None{C.RST}")
-
-            partials = flag_intel.get("partial_matches", [])
             if partials:
-                if nc:
-                    print(f"    Partial Matches:")
-                else:
-                    print(f"  {C.B}{C.W}Partial Matches:{C.RST}")
-                for p in partials[:10]:
-                    short = p if len(p) < 80 else p[:77] + "..."
-                    if nc:
-                        print(f"      {short}")
-                    else:
-                        print(f"    {C.Y}\u25b8{C.RST} {C.Y}{short}{C.RST}")
-                if len(partials) > 10:
-                    if nc:
-                        print(f"      ... ({len(partials) - 10} more hidden)")
-                    else:
-                        print(f"    {C.GR}... ({len(partials) - 10} more hidden){C.RST}")
-            else:
-                if nc:
-                    print(f"    Partial Matches: None")
-                else:
-                    print(f"  {C.B}{C.W}Partial Matches:{C.RST} {C.GR}None{C.RST}")
+                self._row("Partial Matches", str(len(partials)), value_colour=C.Y)
 
-        # ── runtime payload ───────────────────────────────────────────
-        payload = self.metadata.get("runtime_payload", {})
-        if payload.get("hidden_payload_detected"):
-            self._section("HIDDEN PAYLOAD DETECTED", orbital=True)
-            for f in payload.get("payload_findings", []):
-                if nc:
-                    print(f"    - {f['description']} at {f['address']}")
-                else:
-                    print(f"  {C.R}\u25cf{C.RST} {C.R}{f['description']}{C.RST} at {C.B}{f['address']}{C.RST}")
-
-        # ── emulation buffers ─────────────────────────────────────────
-        emulation = self.metadata.get("emulation", {})
-        buffers = emulation.get("reconstructed_buffers", [])
-        if buffers:
-            self._section("RECONSTRUCTED CONSTANTS", orbital=True)
-            for b in buffers:
-                if nc:
-                    print(f"    - {b['ascii']} (at {b['start_addr']})")
-                else:
-                    print(f"  {C.G}\u25cf{C.RST} {C.W}Reconstructed String:{C.RST} {C.G}{C.B}{b['ascii']}{C.RST} {C.DIM}(at {b['start_addr']}){C.RST}")
-
-        # ── hypotheses ────────────────────────────────────────────────
-        hypotheses = self.metadata.get("hypotheses", [])
-        if hypotheses:
-            self._section("AUTOMATED HYPOTHESES", orbital=True)
-            for idx, hyp in enumerate(hypotheses, 1):
-                desc = hyp.get("description", "")
-                conf = hyp.get("confidence", 0)
-                reco = hyp.get("recommendation", "")
-                if nc:
-                    print(f"    Hypothesis #{idx} ({conf}% confidence): {desc}")
-                    print(f"      Recommendation: {reco}")
-                else:
-                    print(f"  {C.Y}{C.B}[Hypothesis #{idx}]{C.RST} {C.W}{desc}{C.RST} {C.GR}({conf}% Confidence){C.RST}")
-                    print(f"    {C.GR}\u2514\u2500{C.RST} {C.G}Recommendation: {reco}{C.RST}")
-
-        # ── analyst summary ───────────────────────────────────────────
-        guidance = self.metadata.get("analyst_guidance", {})
-
-        if nc:
-            print(f"\n  {'='*60}")
-            print(f"   ANALYST SUMMARY & RECOMMENDATIONS")
-            print(f"  {'='*60}")
-        else:
-            print(f"\n  {C.Y}{C.B}{'='*60}{C.RST}")
-            print(f"  {C.Y}{C.B} ANALYST SUMMARY & RECOMMENDATIONS{C.RST}")
-            print(f"  {C.Y}{C.B}{'='*60}{C.RST}")
-
-        self._row("Language", lang.get("language", "Unknown"))
-        self._row("Challenge Type", predicted.get("type", "Unknown"))
-
-        if length:
-            self._row("Input Length", f"{length} characters")
-
-        if hvt:
-            self._row("Primary Targets", ", ".join(hvt[:3]))
-
-        strategies = guidance.get("strategies", [])
-        if strategies:
-            if nc:
-                print(f"\n    Analysis Strategies:")
-            else:
-                print(f"\n  {C.R}{C.B}Analysis Strategies:{C.RST}")
-            for strategy in strategies:
-                if nc:
-                    print(f"      \u2022 {strategy}")
-                else:
-                    print(f"    {C.GR}\u2514\u2500{C.RST} {C.W}{strategy}{C.RST}")
-        else:
-            if nc:
-                print(f"\n    \u2022 No special strategies determined for this compiler layout.")
-            else:
-                print(f"\n    {C.GR}\u2514\u2500 No special strategies determined for this compiler layout.{C.RST}")
-
-        next_step = guidance.get("next_steps", "Open the binary in Ghidra/IDA Pro/Binary Ninja.")
-        if nc:
-            print(f"\n    Recommended Next Step:")
-            print(f"      {next_step}")
-        else:
-            print(f"\n  {C.G}{C.B}Recommended Next Step:{C.RST}")
-            print(f"    {C.B}{C.W}{next_step}{C.RST}")
-
-        if nc:
-            print(f"  {'='*60}\n")
-        else:
-            print(f"  {C.Y}{C.B}{'='*60}{C.RST}\n")
-
-        # ── investigation roadmap ─────────────────────────────────────
+        # ── Investigation Roadmap ─────────────────────────────────────
         roadmap = self.metadata.get("roadmap", [])
         if roadmap:
             if nc:
-                print(f"  === Investigation Roadmap ===")
+                print(f"\n  === Investigation Priority ===")
             else:
-                print(f"  {C.R}{C.B}=== Investigation Roadmap ==={C.RST}")
+                print(f"\n  {C.G}{C.B}=== Investigation Priority ==={C.RST}")
             for step in roadmap:
                 if nc:
                     print(f"  {step}")
                 else:
                     print(f"  {C.W}{step}{C.RST}")
-            print()
-
-        # ── RE scorecard ──────────────────────────────────────────────
-        scorecard = self.metadata.get("scorecard", {})
-        if scorecard:
-            if nc:
-                print(f"  === RE Scorecard ===")
-            else:
-                print(f"  {C.R}{C.B}=== RE Scorecard ==={C.RST}")
-            for k, v in scorecard.items():
-                if nc:
-                    print(f"  {k:<22} {v}")
-                else:
-                    vc = C.R if v in ("High", "Detected", "Advanced") else C.G if v in ("Low", "Not Detected", "Beginner") else C.Y
-                    print(f"  {C.GR}{k:<22}{C.RST} {vc}{v}{C.RST}")
             print()

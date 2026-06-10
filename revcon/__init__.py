@@ -29,8 +29,8 @@ def _build_parser() -> argparse.ArgumentParser:
             f"{C.R}  revcon chall.bin\n"
             f"  revcon crackme -q\n"
             f"  revcon target.exe -j > intel.json\n"
-            f"  revcon challenge -F \"HTB{{}}\"\n"
-            f"  revcon binary -F \"DUCTF{{}}\" -v\n"
+            f"  revcon challenge -F \"FLAG{{}}\"\n"
+            f"  revcon binary -F \"PREFIX{{}}\" -v\n"
             f"  revcon packed.bin -q -F \"FLAG{{}}\"\n"
             f"\n  For authorized security research and education only.{C.RST}\n"
         ),
@@ -65,7 +65,7 @@ def _build_parser() -> argparse.ArgumentParser:
     intel = p.add_argument_group(f"{C.R}Intelligence{C.RST}")
     intel.add_argument(
         "--flag-format", "-F", type=str, default=None, metavar="FORMAT",
-        help="Flag format to search for, e.g. 'HTB{}', 'FLAG{}', 'DUCTF{}'"
+        help="Flag format to search for, e.g. 'FLAG{}', 'PREFIX{}', 'CUSTOM{}'"
     )
 
     return p

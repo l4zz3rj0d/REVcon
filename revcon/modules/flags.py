@@ -12,14 +12,14 @@ class FlagIntelligence:
         self.regex = self._build_regex(flag_format)
 
     def _extract_prefix(self, fmt: str) -> str:
-        """Extracts the prefix before the curly braces. e.g. 'HTB{}' -> 'HTB'."""
+        """Extracts the prefix before the curly braces. e.g. 'FLAG{}' -> 'FLAG'."""
         idx = fmt.find("{")
         if idx == -1:
             return fmt
         return fmt[:idx]
 
     def _build_regex(self, fmt: str) -> re.Pattern:
-        """Converts a flag format like 'HTB{}' into a compiled regex: HTB\\{.*?\\}."""
+        """Converts a flag format like 'FLAG{}' into a compiled regex: FLAG\\{.*?\\}."""
         idx = fmt.find("{")
         if idx == -1:
             # No braces — treat as a plain prefix search
