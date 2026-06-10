@@ -1,223 +1,320 @@
 import json
 import sys
 from typing import Dict, Any, List
-from colorama import Fore, Back, Style
+from revcon.banner import C, _no_color, _strip
 
 class ReportGenerator:
     """Formats and prints binary reconnaissance findings to the terminal or exports to JSON."""
 
     def __init__(self, metadata: Dict[str, Any]):
         self.metadata = metadata
+        self._nc = _no_color()
 
     def render_json(self) -> None:
         """Prints the entire metadata structure as raw JSON."""
         print(json.dumps(self.metadata, indent=4))
 
-    def render_terminal(self) -> None:
-        """Renders a premium CLI report resembling professional tools like capa and PEStudio."""
-        print(f"\n{Fore.GREEN}{'='*60}")
-        print(f" {Fore.WHITE}{Style.BRIGHT}REVcon Reconnaissance & Triage Report{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}{'='*60}{Style.RESET_ALL}\n")
+    # ── section / row helpers (Spider-style) ──────────────────────────
 
-        # 1. Target Information
+    def _section(self, title: str, orbital: bool = False) -> None:
+        if self._nc:
+            print(f"\n  [ {title} ]")
+            return
+        icon = f"{C.CY}\u25d3{C.RST} " if orbital else ""
+        print(f"\n  {icon}{C.B}{C.W}{title}{C.RST}")
+        print(f"  {C.GR}{'\u2500' * 60}{C.RST}")
+
+    def _row(self, label: str, value: str, value_colour=None) -> None:
+        vc = value_colour or C.W
+        if self._nc:
+            print(f"    {label:<20}  {_strip(value)}")
+        else:
+            print(f"  {C.CY}\u25cf{C.RST} {C.W}{label:<18}{C.RST} {vc}{value}{C.RST}")
+
+    def _finding(self, tag: str, severity: str, msg: str) -> None:
+        if self._nc:
+            print(f"  [{severity:<7}] [{tag}] {msg}")
+            return
+        sev = severity.upper()
+        if "HIGH" in sev or "CRITICAL" in sev:
+            bg = C.R
+        elif "MEDIUM" in sev:
+            bg = C.O
+        else:
+            bg = C.GR
+        print(f"  {bg}{C.B}[{sev:^8}]{C.RST} {C.B}{C.W}{tag:^12}{C.RST} {C.GR}\u2504{C.RST} {C.DIM}{msg}{C.RST}")
+
+    # ── main terminal render ──────────────────────────────────────────
+
+    def render_terminal(self) -> None:
+        """Renders a Spider-style CLI report with sections and orbital HUD rows."""
+        nc = self._nc
+
         intel = self.metadata.get("binary_intel", {})
         lang = self.metadata.get("language", {})
         predicted = self.metadata.get("predicted_challenge", {})
-        
-        print(f"{Fore.CYAN}{Style.BRIGHT}--- TARGET METADATA ---{Style.RESET_ALL}")
-        print(f" {Style.BRIGHT}File Size:{Style.RESET_ALL}    {intel.get('file_size', 0)} bytes")
-        print(f" {Style.BRIGHT}Format:{Style.RESET_ALL}       {Fore.GREEN}{intel.get('format', 'Unknown')}{Style.RESET_ALL}")
-        print(f" {Style.BRIGHT}Architecture: {Style.RESET_ALL}{intel.get('arch', 'Unknown')} ({intel.get('bitness', 'Unknown')})")
-        print(f" {Style.BRIGHT}Endianness:{Style.RESET_ALL}   {intel.get('endianness', 'Unknown')}")
-        print(f" {Style.BRIGHT}Compiler:{Style.RESET_ALL}     {intel.get('compiler', 'Unknown')}")
-        print(f" {Style.BRIGHT}Build Info:{Style.RESET_ALL}   {intel.get('build_info', 'Unknown')}")
-        print(f" {Style.BRIGHT}Language:{Style.RESET_ALL}     {Fore.YELLOW}{lang.get('language', 'Unknown')}{Style.RESET_ALL} (Confidence: {lang.get('confidence', 0)}%)")
-        print(f" {Style.BRIGHT}Challenge Type:{Style.RESET_ALL} {Fore.MAGENTA}{predicted.get('type', 'Unknown')}{Style.RESET_ALL} (Confidence: {predicted.get('confidence', 0)}%)\n")
 
-        # 2. Security Mitigations
-        print(f"{Fore.CYAN}{Style.BRIGHT}--- SECURITY MITIGATIONS ---{Style.RESET_ALL}")
+        # ── target metadata ───────────────────────────────────────────
+        self._section("TARGET METADATA", orbital=True)
+        self._row("File Size", f"{intel.get('file_size', 0)} bytes")
+        self._row("Format", intel.get('format', 'Unknown'), value_colour=C.G)
+        self._row("Architecture", f"{intel.get('arch', 'Unknown')} ({intel.get('bitness', 'Unknown')})")
+        self._row("Endianness", intel.get('endianness', 'Unknown'))
+        self._row("Compiler", intel.get('compiler', 'Unknown'))
+        self._row("Build Info", intel.get('build_info', 'Unknown'))
+        self._row("Language", f"{lang.get('language', 'Unknown')} ({lang.get('confidence', 0)}%)", value_colour=C.Y)
+        self._row("Challenge Type", f"{predicted.get('type', 'Unknown')} ({predicted.get('confidence', 0)}%)", value_colour=C.MG)
+
+        # ── security mitigations ──────────────────────────────────────
         sec = self.metadata.get("security", {})
-        for mitigation, details in sec.items():
-            status = details.get("status", "Unknown")
-            enabled = details.get("enabled", False)
-            explanation = details.get("explanation", "")
-            
-            color = Fore.GREEN if enabled else Fore.RED
-            # Fix checksec specific output status colors
-            if "enabled" in status.lower() or "found" in status.lower() or "full" in status.lower():
-                color = Fore.GREEN
-            elif "disabled" in status.lower() or "no " in status.lower():
-                color = Fore.RED
-            elif "partial" in status.lower():
-                color = Fore.YELLOW
+        if sec:
+            self._section("SECURITY MITIGATIONS", orbital=True)
+            for mitigation, details in sec.items():
+                status = details.get("status", "Unknown")
+                enabled = details.get("enabled", False)
+                explanation = details.get("explanation", "")
 
-            print(f" {Style.BRIGHT}{mitigation:<8}:{Style.RESET_ALL} {color}{status:<30}{Style.RESET_ALL}")
-            print(f"   {Fore.LIGHTBLACK_EX}└─ {explanation}{Style.RESET_ALL}")
-        print()
+                if "enabled" in status.lower() or "found" in status.lower() or "full" in status.lower():
+                    sc = C.G
+                elif "disabled" in status.lower() or "no " in status.lower():
+                    sc = C.R
+                elif "partial" in status.lower():
+                    sc = C.Y
+                else:
+                    sc = C.W
 
-        # 3. Heuristics & Reversing Clues
+                if nc:
+                    print(f"    {mitigation:<8}: {status:<30}")
+                    print(f"      \u2514\u2500 {explanation}")
+                else:
+                    print(f"  {sc}\u25cf{C.RST} {C.W}{mitigation:<8}{C.RST}  {sc}{status:<30}{C.RST}")
+                    print(f"    {C.GR}\u2514\u2500 {explanation}{C.RST}")
+
+        # ── heuristics ────────────────────────────────────────────────
         heuristics = self.metadata.get("heuristics", {})
-        print(f"{Fore.CYAN}{Style.BRIGHT}--- REVERSE ENGINEERING HEURISTICS ---{Style.RESET_ALL}")
-        
-        # Expected Length
+        self._section("REVERSE ENGINEERING HEURISTICS", orbital=True)
+
         length = heuristics.get("expected_input_length")
-        len_str = f"{Fore.GREEN}{length}{Style.RESET_ALL}" if length else f"{Fore.YELLOW}None detected{Style.RESET_ALL}"
-        print(f" {Style.BRIGHT}Expected Input Length:{Style.RESET_ALL} {len_str}")
-        
-        # Character Validation
+        self._row("Input Length", str(length) if length else "None detected",
+                  value_colour=C.G if length else C.GR)
+
         char_val = heuristics.get("per_character_validation", False)
-        char_str = f"{Fore.GREEN}Yes (Character-by-character loops detected){Style.RESET_ALL}" if char_val else "No"
-        print(f" {Style.BRIGHT}Per-Char Validation:{Style.RESET_ALL}   {char_str}")
-        
-        # Function dispatch
+        self._row("Per-Char Validation", "Yes (character-by-character loops)" if char_val else "No",
+                  value_colour=C.G if char_val else C.GR)
+
         dispatch = heuristics.get("function_dispatch_table", False)
-        dispatch_str = f"{Fore.YELLOW}Yes (Dispatch tables / Dynamic jumps found){Style.RESET_ALL}" if dispatch else "No"
-        print(f" {Style.BRIGHT}Function Dispatch:{Style.RESET_ALL}     {dispatch_str}")
+        self._row("Function Dispatch", "Yes (dispatch tables / dynamic jumps)" if dispatch else "No",
+                  value_colour=C.Y if dispatch else C.GR)
 
-        # XOR loops
         xor = heuristics.get("xor_loops_detected", False)
-        xor_str = f"{Fore.RED}Yes (XOR decryption/obfuscation loops found){Style.RESET_ALL}" if xor else "No"
-        print(f" {Style.BRIGHT}XOR Loops Detected:{Style.RESET_ALL}    {xor_str}")
+        self._row("XOR Loops", "Yes (XOR decryption/obfuscation)" if xor else "No",
+                  value_colour=C.R if xor else C.GR)
 
-        # Base64
         b64 = heuristics.get("base64_detected", False)
-        b64_str = f"{Fore.GREEN}Yes (Base64 character map present in strings){Style.RESET_ALL}" if b64 else "No"
-        print(f" {Style.BRIGHT}Base64 Routine:{Style.RESET_ALL}        {b64_str}")
+        self._row("Base64 Routine", "Yes (base64 character map present)" if b64 else "No",
+                  value_colour=C.G if b64 else C.GR)
 
-        # Crypto
         crypto = heuristics.get("crypto_signatures", [])
-        crypto_str = f"{Fore.YELLOW}{', '.join(crypto)}{Style.RESET_ALL}" if crypto else "None"
-        print(f" {Style.BRIGHT}Crypto Algorithms:{Style.RESET_ALL}     {crypto_str}")
+        self._row("Crypto Algorithms", ", ".join(crypto) if crypto else "None",
+                  value_colour=C.Y if crypto else C.GR)
 
-        # Packed
         packed = heuristics.get("packed_binary", False)
-        packed_str = f"{Fore.RED}Yes (Packed binary indicators / UPX found){Style.RESET_ALL}" if packed else "No"
-        print(f" {Style.BRIGHT}Packed Binary:{Style.RESET_ALL}         {packed_str}\n")
+        self._row("Packed Binary", "Yes (UPX / packed indicators)" if packed else "No",
+                  value_colour=C.R if packed else C.GR)
 
-        # 4. Section Entropy (only print sections of interest or high entropy)
+        # ── section entropy ───────────────────────────────────────────
         entropy = self.metadata.get("entropy", {})
         sections = entropy.get("sections", [])
         if sections:
-            print(f"{Fore.CYAN}{Style.BRIGHT}--- SECTION ENTROPY ANALYSIS ---{Style.RESET_ALL}")
-            print(f"  {'Section':<15} {'Size (Bytes)':<15} {'Entropy':<10} {'Status':<30}")
-            print(f"  {'-'*15} {'-'*15} {'-'*10} {'-'*30}")
+            self._section("SECTION ENTROPY", orbital=True)
+            if nc:
+                print(f"    {'Section':<15} {'Size (Bytes)':<15} {'Entropy':<10} {'Status':<30}")
+                print(f"    {'-'*15} {'-'*15} {'-'*10} {'-'*30}")
+            else:
+                print(f"  {C.GR}{'Section':<15} {'Size':<15} {'Entropy':<10} {'Status'}{C.RST}")
+                print(f"  {C.GR}{'\u2500'*60}{C.RST}")
+
             for sec_data in sections:
                 ent = sec_data.get("entropy", 0.0)
                 status = sec_data.get("status", "")
                 name = sec_data.get("name", "Unknown")
                 size = sec_data.get("size", 0)
-                
-                color = Fore.RESET
-                if ent > 7.2:
-                    color = Fore.RED + Style.BRIGHT
-                elif ent > 6.0:
-                    color = Fore.YELLOW
-                
-                print(f"  {color}{name:<15} {size:<15} {ent:<10} {status}{Style.RESET_ALL}")
-            print()
 
-        # 5. Imports & External APIs
+                if ent > 7.2:
+                    ec = C.R + C.B
+                elif ent > 6.0:
+                    ec = C.Y
+                else:
+                    ec = C.GR
+
+                if nc:
+                    print(f"    {name:<15} {size:<15} {ent:<10.4f} {status}")
+                else:
+                    print(f"  {ec}{name:<15} {size:<15} {ent:<10.4f} {status}{C.RST}")
+
+        # ── imports ───────────────────────────────────────────────────
         imports = self.metadata.get("imports", {})
         flagged_imports = imports.get("flagged_imports", {})
         if flagged_imports:
-            print(f"{Fore.CYAN}{Style.BRIGHT}--- HIGH RELEVANCE IMPORTS ---{Style.RESET_ALL}")
+            self._section("HIGH RELEVANCE IMPORTS", orbital=True)
             for imp_name, desc in flagged_imports.items():
-                print(f"  {Fore.YELLOW}{imp_name:<12}{Style.RESET_ALL} → {desc}")
-            print()
+                if nc:
+                    print(f"    {imp_name:<12} \u2192 {desc}")
+                else:
+                    print(f"  {C.Y}\u25cf{C.RST} {C.Y}{imp_name:<12}{C.RST} {C.GR}\u2192{C.RST} {C.W}{desc}{C.RST}")
 
-        # 6. Symbols & High Value Targets
+        # ── symbols ───────────────────────────────────────────────────
         symbols = self.metadata.get("symbols", {})
         hvt = symbols.get("high_value_targets", [])
         if hvt:
-            print(f"{Fore.CYAN}{Style.BRIGHT}--- HIGH VALUE TARGET SYMBOLS ---{Style.RESET_ALL}")
+            self._section("HIGH VALUE TARGETS", orbital=True)
             for i, target in enumerate(hvt, 1):
-                print(f"  {i}. {Fore.GREEN}{target}{Style.RESET_ALL}")
-            print()
+                if nc:
+                    print(f"    {i}. {target}")
+                else:
+                    print(f"  {C.G}\u25b8{C.RST} {C.G}{target}{C.RST}")
 
-        # 7. Categorized Strings
+        # ── categorized strings ───────────────────────────────────────
         strings = self.metadata.get("strings", {})
         categories = strings.get("categories", {})
-        has_strings_of_interest = any(len(lst) > 0 for lst in categories.values())
-        
-        if has_strings_of_interest:
-            print(f"{Fore.CYAN}{Style.BRIGHT}--- INTERESTING STRINGS BY CATEGORY ---{Style.RESET_ALL}")
+        has_strings = any(len(lst) > 0 for lst in categories.values())
+
+        if has_strings:
+            self._section("INTERESTING STRINGS", orbital=True)
             for cat_name, lst in categories.items():
                 if lst:
                     title = cat_name.replace("_", " ").upper()
-                    print(f"  {Style.BRIGHT}[{title}]{Style.RESET_ALL}")
-                    # Print top 5 strings in each category to avoid overwhelming the screen
+                    if nc:
+                        print(f"    [{title}]")
+                    else:
+                        print(f"  {C.CY}{C.B}[{title}]{C.RST}")
                     for s in lst[:5]:
-                        # Shorten extremely long strings
                         short = s if len(s) < 80 else s[:77] + "..."
-                        print(f"    • {short}")
+                        if nc:
+                            print(f"      \u2022 {short}")
+                        else:
+                            print(f"    {C.GR}\u2514\u2500{C.RST} {C.W}{short}{C.RST}")
                     if len(lst) > 5:
-                        print(f"    {Fore.LIGHTBLACK_EX}... ({len(lst) - 5} more strings hidden. Use --verbose to see all){Style.RESET_ALL}")
-            print()
+                        if nc:
+                            print(f"      ... ({len(lst) - 5} more hidden)")
+                        else:
+                            print(f"    {C.GR}   ... ({len(lst) - 5} more hidden. Use --verbose to see all){C.RST}")
 
-        # 8. Plugin Findings
+        # ── plugin findings ───────────────────────────────────────────
         plugin_findings = self.metadata.get("plugin_findings", {})
-        has_plugin_detections = any(res.get("detected", False) for res in plugin_findings.values())
-        if has_plugin_detections:
-            print(f"{Fore.CYAN}{Style.BRIGHT}--- DYNAMIC PLUGIN DETECTIONS ---{Style.RESET_ALL}")
+        has_detections = any(res.get("detected", False) for res in plugin_findings.values())
+        if has_detections:
+            self._section("PLUGIN DETECTIONS", orbital=True)
             for p_name, res in plugin_findings.items():
                 if res.get("detected", False):
-                    print(f"  {Style.BRIGHT}[{p_name}]{Style.RESET_ALL}")
+                    if nc:
+                        print(f"    [{p_name}]")
+                    else:
+                        print(f"  {C.MG}\u25c8{C.RST} {C.B}{C.W}{p_name}{C.RST}")
                     for finding in res.get("findings", []):
-                        print(f"    - {finding}")
-            print()
+                        if nc:
+                            print(f"      - {finding}")
+                        else:
+                            print(f"    {C.GR}\u2514\u2500{C.RST} {C.W}{finding}{C.RST}")
 
-        # 8b. Flag Intelligence
+        # ── flag intelligence ─────────────────────────────────────────
         flag_intel = self.metadata.get("flag_intel")
         if flag_intel:
-            print(f"{Fore.CYAN}{Style.BRIGHT}--- FLAG INTELLIGENCE ---{Style.RESET_ALL}")
-            print(f"  {Style.BRIGHT}Target Format:{Style.RESET_ALL}    {flag_intel.get('flag_format', 'N/A')}")
-            print(f"  {Style.BRIGHT}Search Regex:{Style.RESET_ALL}     {flag_intel.get('regex', 'N/A')}")
+            self._section("FLAG INTELLIGENCE", orbital=True)
+            self._row("Target Format", flag_intel.get("flag_format", "N/A"))
+            self._row("Search Regex", flag_intel.get("regex", "N/A"))
 
             confidence = flag_intel.get("confidence", "LOW")
-            conf_color = Fore.GREEN if confidence == "HIGH" else Fore.YELLOW if confidence == "MEDIUM" else Fore.RED
-            print(f"  {Style.BRIGHT}Confidence:{Style.RESET_ALL}       {conf_color}{confidence}{Style.RESET_ALL}")
+            conf_colour = C.G if confidence == "HIGH" else C.Y if confidence == "MEDIUM" else C.R
+            self._row("Confidence", confidence, value_colour=conf_colour)
 
             matches = flag_intel.get("matches", [])
             if matches:
-                print(f"\n  {Style.BRIGHT}Direct Matches:{Style.RESET_ALL}")
+                if nc:
+                    print(f"    Direct Matches:")
+                else:
+                    print(f"\n  {C.B}{C.W}Direct Matches:{C.RST}")
                 for m in matches:
-                    print(f"    {Fore.GREEN}{m}{Style.RESET_ALL}")
+                    if nc:
+                        print(f"      {m}")
+                    else:
+                        print(f"    {C.G}\u25b8{C.RST} {C.G}{m}{C.RST}")
             else:
-                print(f"\n  {Style.BRIGHT}Direct Matches:{Style.RESET_ALL}  {Fore.LIGHTBLACK_EX}None{Style.RESET_ALL}")
+                if nc:
+                    print(f"    Direct Matches:  None")
+                else:
+                    print(f"\n  {C.B}{C.W}Direct Matches:{C.RST}  {C.GR}None{C.RST}")
 
             partials = flag_intel.get("partial_matches", [])
             if partials:
-                print(f"  {Style.BRIGHT}Partial Matches:{Style.RESET_ALL}")
+                if nc:
+                    print(f"    Partial Matches:")
+                else:
+                    print(f"  {C.B}{C.W}Partial Matches:{C.RST}")
                 for p in partials[:10]:
                     short = p if len(p) < 80 else p[:77] + "..."
-                    print(f"    {Fore.YELLOW}{short}{Style.RESET_ALL}")
+                    if nc:
+                        print(f"      {short}")
+                    else:
+                        print(f"    {C.Y}\u25b8{C.RST} {C.Y}{short}{C.RST}")
                 if len(partials) > 10:
-                    print(f"    {Fore.LIGHTBLACK_EX}... ({len(partials) - 10} more hidden){Style.RESET_ALL}")
+                    if nc:
+                        print(f"      ... ({len(partials) - 10} more hidden)")
+                    else:
+                        print(f"    {C.GR}... ({len(partials) - 10} more hidden){C.RST}")
             else:
-                print(f"  {Style.BRIGHT}Partial Matches:{Style.RESET_ALL} {Fore.LIGHTBLACK_EX}None{Style.RESET_ALL}")
-            print()
+                if nc:
+                    print(f"    Partial Matches: None")
+                else:
+                    print(f"  {C.B}{C.W}Partial Matches:{C.RST} {C.GR}None{C.RST}")
 
-
-        # 9. Recommendations / Analyst Summary
+        # ── analyst summary ───────────────────────────────────────────
         guidance = self.metadata.get("analyst_guidance", {})
-        print(f"{Fore.YELLOW}{Style.BRIGHT}{'='*60}")
-        print(f" ANALYST SUMMARY & RECOMMENDATIONS")
-        print(f"{'='*60}{Style.RESET_ALL}")
-        print(f" {Style.BRIGHT}Language / Runtime:{Style.RESET_ALL} {lang.get('language', 'Unknown')}")
-        print(f" {Style.BRIGHT}Predicted Challenge:{Style.RESET_ALL} {predicted.get('type', 'Unknown')}")
+
+        if nc:
+            print(f"\n  {'='*60}")
+            print(f"   ANALYST SUMMARY & RECOMMENDATIONS")
+            print(f"  {'='*60}")
+        else:
+            print(f"\n  {C.Y}{C.B}{'='*60}{C.RST}")
+            print(f"  {C.Y}{C.B} ANALYST SUMMARY & RECOMMENDATIONS{C.RST}")
+            print(f"  {C.Y}{C.B}{'='*60}{C.RST}")
+
+        self._row("Language", lang.get("language", "Unknown"))
+        self._row("Challenge Type", predicted.get("type", "Unknown"))
+
         if length:
-            print(f" {Style.BRIGHT}Expected Input Length:{Style.RESET_ALL} {length} characters")
-        
-        # High value targets
+            self._row("Input Length", f"{length} characters")
+
         if hvt:
-            print(f" {Style.BRIGHT}Primary Functions:{Style.RESET_ALL}   {', '.join(hvt[:3])}")
-            
-        print(f"\n {Style.BRIGHT}{Fore.CYAN}Analysis Strategies:{Style.RESET_ALL}")
-        for strategy in guidance.get("strategies", []):
-            print(f"  • {strategy}")
-        if not guidance.get("strategies"):
-            print("  • No special strategies determined for this compiler layout.")
-            
-        print(f"\n {Style.BRIGHT}{Fore.GREEN}Recommended Next Step:{Style.RESET_ALL}")
-        print(f"  {Style.BRIGHT}{guidance.get('next_steps')}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}{'='*60}{Style.RESET_ALL}\n")
+            self._row("Primary Targets", ", ".join(hvt[:3]))
+
+        strategies = guidance.get("strategies", [])
+        if strategies:
+            if nc:
+                print(f"\n    Analysis Strategies:")
+            else:
+                print(f"\n  {C.CY}{C.B}Analysis Strategies:{C.RST}")
+            for strategy in strategies:
+                if nc:
+                    print(f"      \u2022 {strategy}")
+                else:
+                    print(f"    {C.GR}\u2514\u2500{C.RST} {C.W}{strategy}{C.RST}")
+        else:
+            if nc:
+                print(f"\n    \u2022 No special strategies determined for this compiler layout.")
+            else:
+                print(f"\n    {C.GR}\u2514\u2500 No special strategies determined for this compiler layout.{C.RST}")
+
+        next_step = guidance.get("next_steps", "Open the binary in Ghidra/IDA Pro/Binary Ninja.")
+        if nc:
+            print(f"\n    Recommended Next Step:")
+            print(f"      {next_step}")
+        else:
+            print(f"\n  {C.G}{C.B}Recommended Next Step:{C.RST}")
+            print(f"    {C.B}{C.W}{next_step}{C.RST}")
+
+        if nc:
+            print(f"  {'='*60}\n")
+        else:
+            print(f"  {C.Y}{C.B}{'='*60}{C.RST}\n")

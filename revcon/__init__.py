@@ -1,80 +1,115 @@
 """
-REVcon: Automated Reconnaissance and Triage Framework for Reverse Engineering
-Author: Lazzer
+  REVcon  v1.0.0  —  Automated Binary Reconnaissance Engine
+
+  Static Recon | ELF / PE / Mach-O | Heuristics | Challenge Predictor
+
+  Author: Sree Danush S (L4ZZ3RJ0D)
 """
 
 import argparse
 import sys
 import os
-from colorama import init
 
-from revcon.banner import print_banner
+from revcon.banner import print_banner, C, VERSION, _no_color
 from revcon.engine import AnalysisEngine
 from revcon.report import ReportGenerator
 
-def main() -> None:
-    """Main CLI entry point for REVcon."""
-    # Initialize colorama for cross-platform color support
-    init(autoreset=True)
 
-    parser = argparse.ArgumentParser(
-        description="REVcon - Reverse Engineering Recon Framework",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+def _build_parser() -> argparse.ArgumentParser:
+    """Constructs the CLI argument parser with Spider-style grouped sections."""
+    p = argparse.ArgumentParser(
+        prog="revcon",
+        description=(
+            f"{C.CY}{C.B}REVcon v{VERSION}{C.RST}  —  "
+            "Automated Binary Reconnaissance & Triage Framework"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            f"\n{C.GR}  ── Examples ────────────────────────────────────────────────────\n\n"
+            f"{C.CY}  revcon chall.bin\n"
+            f"  revcon crackme -q\n"
+            f"  revcon target.exe -j > intel.json\n"
+            f"  revcon challenge -F \"HTB{{}}\"\n"
+            f"  revcon binary -F \"DUCTF{{}}\" -v\n"
+            f"  revcon packed.bin -q -F \"FLAG{{}}\"\n"
+            f"\n  For authorized security research and education only.{C.RST}\n"
+        ),
     )
-    parser.add_argument(
-        "binary",
-        help="Path to the binary file to analyze"
+
+    p.add_argument("binary", nargs="?", help="Path to the binary file to analyze")
+
+    scan = p.add_argument_group(f"{C.CY}Scan Options{C.RST}")
+    scan.add_argument(
+        "--quick", "-q", action="store_true",
+        help="Skip Capstone disassembly heuristics and entropy analysis"
     )
-    parser.add_argument(
-        "-q", "--quick",
-        action="store_true",
-        help="Run quick checks only (skip heavy disasm heuristics and entropy analysis)"
+    scan.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Enable verbose logging / debug output"
     )
-    parser.add_argument(
-        "-j", "--json",
-        action="store_true",
-        help="Output findings in raw JSON format to stdout"
+
+    out = p.add_argument_group(f"{C.CY}Output{C.RST}")
+    out.add_argument(
+        "--json", "-j", action="store_true",
+        help="Output full findings as raw JSON to stdout"
     )
-    parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable verbose logging/debug output"
-    )
-    parser.add_argument(
-        "-F", "--flag-format",
-        type=str,
-        default=None,
-        metavar="FORMAT",
+
+    intel = p.add_argument_group(f"{C.CY}Intelligence{C.RST}")
+    intel.add_argument(
+        "--flag-format", "-F", type=str, default=None, metavar="FORMAT",
         help="Flag format to search for, e.g. 'HTB{}', 'FLAG{}', 'DUCTF{}'"
     )
 
-    # If no arguments provided, print help
+    return p
+
+
+def main() -> None:
+    """Main CLI entry point for REVcon."""
+    parser = _build_parser()
+
+    # If no arguments provided, print banner + help
     if len(sys.argv) == 1:
+        print_banner()
         parser.print_help()
         sys.exit(0)
 
     args = parser.parse_args()
 
-    # Validate target binary path
+    # Validate target binary
+    if args.binary is None:
+        print_banner()
+        parser.print_help()
+        sys.exit(0)
+
     if not os.path.exists(args.binary):
-        print(f"[-] Error: File '{args.binary}' does not exist.", file=sys.stderr)
+        print(f"{C.R}{C.B}[!]{C.RST} {C.R}Error: File '{args.binary}' does not exist.{C.RST}", file=sys.stderr)
         sys.exit(1)
-    
+
     if not os.path.isfile(args.binary):
-        print(f"[-] Error: '{args.binary}' is not a file.", file=sys.stderr)
+        print(f"{C.R}{C.B}[!]{C.RST} {C.R}Error: '{args.binary}' is not a file.{C.RST}", file=sys.stderr)
         sys.exit(1)
 
     try:
         # 1. Print banner if not in JSON mode
         if not args.json:
             print_banner()
-            print(f"[*] Analyzing binary: {args.binary}")
-            if args.quick:
-                print("[*] Running in QUICK mode")
-            if args.flag_format:
-                print(f"[*] Flag format: {args.flag_format}")
-            if args.verbose:
-                print("[*] Verbose logging enabled\n")
+            nc = _no_color()
+            if not nc:
+                print(f"{C.CY}[*]{C.RST} {C.W}Analyzing binary:{C.RST} {C.B}{args.binary}{C.RST}")
+                if args.quick:
+                    print(f"{C.CY}[*]{C.RST} {C.W}Running in{C.RST} {C.Y}{C.B}QUICK{C.RST} {C.W}mode{C.RST}")
+                if args.flag_format:
+                    print(f"{C.CY}[*]{C.RST} {C.W}Flag format:{C.RST} {C.G}{args.flag_format}{C.RST}")
+                if args.verbose:
+                    print(f"{C.CY}[*]{C.RST} {C.W}Verbose logging enabled{C.RST}\n")
+            else:
+                print(f"[*] Analyzing binary: {args.binary}")
+                if args.quick:
+                    print("[*] Running in QUICK mode")
+                if args.flag_format:
+                    print(f"[*] Flag format: {args.flag_format}")
+                if args.verbose:
+                    print("[*] Verbose logging enabled\n")
 
         # 2. Run analysis
         engine = AnalysisEngine(
@@ -93,10 +128,10 @@ def main() -> None:
             reporter.render_terminal()
 
     except KeyboardInterrupt:
-        print("\n[-] Analysis interrupted by user. Exiting...", file=sys.stderr)
+        print(f"\n{C.R}{C.B}[!]{C.RST} {C.R}Analysis interrupted by user. Exiting...{C.RST}", file=sys.stderr)
         sys.exit(130)
     except Exception as e:
-        print(f"\n[-] Error: {str(e)}", file=sys.stderr)
+        print(f"\n{C.R}{C.B}[!]{C.RST} {C.R}Error: {str(e)}{C.RST}", file=sys.stderr)
         if args.verbose:
             import traceback
             traceback.print_exc()
